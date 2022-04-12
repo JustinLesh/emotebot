@@ -1,0 +1,2 @@
+# emotebot
+emotebot: Discord bot
