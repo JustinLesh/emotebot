@@ -1,4 +1,9 @@
 import discord
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 client = discord.Client()
 
@@ -14,4 +19,4 @@ async def on_message(message):
     if message.content.startswith('/addemote'):
         await message.channel.send('Hello!')
 
-client.run('token')
+client.run(DISCORD_TOKEN)
