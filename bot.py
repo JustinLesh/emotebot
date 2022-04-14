@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord import Embed, Client, Intents
 from discord.ext import commands
@@ -12,6 +13,7 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 bot = commands.Bot(command_prefix='!')
 slash = SlashCommand(bot, sync_commands=True)
 guild_id = []
+REQUIRED_POSITION = 8
 
 @bot.event
 async def on_ready():
@@ -56,5 +58,29 @@ async def _remove(ctx:SlashContext, emoji: discord.Emoji):
             await ctx.reply(emoji + " is not a valid custom emoji in this server. Try again with a server specific emoji.", allowed_mentions=None)
     else:
         await ctx.reply(emoji + " is not a valid custom emoji. Try again with a server specific emoji.", allowed_mentions=None)
+
+@bot.event
+async def on_raw_reaction_add(ctx:discord.RawReactionActionEvent):
+    channel = bot.get_channel(ctx.channel_id)
+    message = await channel.fetch_message(ctx.message_id)
+    if message.author == bot.user:
+        yay_count = 0
+        nay_count = 0
+        for r in message.reactions:
+            # checks the reactant isn't a bot and the emoji isn't the one they just reacted with
+            if ctx.member in await r.users().flatten() and not ctx.member.bot and str(r) != str(ctx.emoji):
+                # removes the reaction
+                await message.remove_reaction(ctx.emoji, ctx.member)
+            elif ctx.member in await r.users().flatten() and not ctx.member.bot and ctx.member.top_role.position < REQUIRED_POSITION:
+                await ctx.member.send("You do not have the required permissions to vote.")
+                # removes the reaction
+                await message.remove_reaction(ctx.emoji, ctx.member)
+
+        message = await channel.fetch_message(ctx.message_id)
+        yay = discord.utils.get(message.reactions, emoji="✅")
+        nay = discord.utils.get(message.reactions, emoji="❎")
+        
+
+#noble is position 8 in roles
 
 bot.run(DISCORD_TOKEN)
