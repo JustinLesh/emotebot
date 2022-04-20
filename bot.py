@@ -126,9 +126,9 @@ async def _remove(ctx:SlashContext, emoji: discord.Emoji):
         if emoji[1] == "a":     #this means we have an animated emoji
             emoji_parts = emoji[1:-2][1:].split(":")        
             temp = [emoji_parts[0], emoji_parts[1], emoji_parts[2]]
-            emoji_parts[0] = temp[emoji_parts[1]]       #emoji_parts[0] is the emoji's name
-            emoji_parts[1] = temp[emoji_parts[2]]       #emoji_parts[1] is the emoji's id
-            emoji_parts[2] = temp[emoji_parts[0]]       #emoji_parts[2] is the emoji's animated tag
+            emoji_parts[0] = temp[1]       #emoji_parts[0] is the emoji's name
+            emoji_parts[1] = temp[2]       #emoji_parts[1] is the emoji's id
+            emoji_parts[2] = temp[0]       #emoji_parts[2] is the emoji's animated tag
         else:
             emoji_parts = emoji[1:-2][1:].split(":")    #emoji_parts[0] is the emoji's name
             emoji_parts[0] = emoji_parts[0]             #emoji_parts[1] is the emoji's id 
