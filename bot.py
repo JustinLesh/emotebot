@@ -1,6 +1,4 @@
 import asyncio
-from tkinter import E
-from unicodedata import name
 import discord
 from discord import Embed, Client, Intents
 from discord.ext import commands
@@ -21,19 +19,30 @@ bot = commands.Bot(command_prefix='!')
 slash = SlashCommand(bot, sync_commands=True)
 guild_id = []
 REQUIRED_POSITION = 0
-REQUIRED_VOTES = 2
+REQUIRED_VOTES_DEFAULT = 4 #this number includes the bots initial vote.
 CURRENT_VOTING = []
+REQUIRED_VOTES_DICT = {}
+DICT_FILE_NAME = "dict.txt"
 
 
 @bot.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(bot))
+    f = open(DICT_FILE_NAME, "r+")
+    for line in f:
+        s = line.rstrip().split(":")
+        REQUIRED_VOTES_DICT[int(s[0])] = int(s[1])
     for guild in bot.guilds:
+        if guild.id not in REQUIRED_VOTES_DICT:
+            print("Guild ID: " + str(guild.id) + " was not found in dict.txt... Adding now with default votes.")
+            REQUIRED_VOTES_DICT[guild.id] = REQUIRED_VOTES_DEFAULT
+            f.write("\n" +str(guild.id) + ":" + str(REQUIRED_VOTES_DEFAULT))
         guild_id.append(guild.id)
         if guild.name == "Cobaltium":
             for role in guild.roles:
                 if role.name == "Noble":
                     REQUIRED_POSITION = role.position
+    f.close()
+    print('We have logged in as {0.user}'.format(bot))
 
 
 @slash.slash(
@@ -144,18 +153,51 @@ async def _remove(ctx:SlashContext, emoji: discord.Emoji):
         await ctx.reply(emoji + " is not a valid custom emoji. Try again with a server specific emoji.", allowed_mentions=None, delete_after=15)
 
 
+@slash.slash(
+    name="setvoting",
+    description='Set the amount of votes required for a emote to be removed.',
+    guild_ids=guild_id,
+    options=[
+        create_option(
+            name="amount",
+            description="How many unique non-bot users need to react vote to remove a emote from the server.",
+            required=True,
+            option_type=4
+        )
+    ]
+)
+async def _setvoting(ctx:SlashContext, amount:int):
+    if ctx.author.top_role.position < ctx.guild.roles[-1].position:
+       return await ctx.reply("You don't have the permissions to do this. Reason: Role too low.", delete_after=15)
+    previous = REQUIRED_VOTES_DICT[ctx.guild.id]
+    REQUIRED_VOTES_DICT.update({ ctx.guild.id : amount })
+    f = open(DICT_FILE_NAME, "w")
+    count = 1
+    max = len(REQUIRED_VOTES_DICT.items())
+    for id, value in REQUIRED_VOTES_DICT.items():
+        if count < max:
+            f.write(str(id) + ":" + str(value) + "\n")
+            count += 1
+        else:
+            f.write(str(id) + ":" + str(value))
+    f.close()
+
+    await ctx.reply("Amount of votes required changed from '" + str(previous) + " to '" + str(amount) + "'.", delete_after=15)
+
+
 @bot.event
 async def on_raw_reaction_add(ctx:discord.RawReactionActionEvent):
     channel = bot.get_channel(ctx.channel_id)
     message = await channel.fetch_message(ctx.message_id)
-    if message.author == bot.user:
+    if message.author == bot.user and ctx.member != bot.user:
+        if ctx.member.top_role.position < REQUIRED_POSITION:
+            await ctx.member.send("You do not have the required permissions to vote.")
+            # removes the reaction
+            return await message.remove_reaction(ctx.emoji, ctx.member)
+
         for r in message.reactions:
             # checks the reactant isn't a bot and the emoji isn't the one they just reacted with
             if ctx.member in await r.users().flatten() and not ctx.member.bot and str(r) != str(ctx.emoji):
-                # removes the reaction
-                await message.remove_reaction(ctx.emoji, ctx.member)
-            elif ctx.member in await r.users().flatten() and not ctx.member.bot and ctx.member.top_role.position < REQUIRED_POSITION:
-                await ctx.member.send("You do not have the required permissions to vote.")
                 # removes the reaction
                 await message.remove_reaction(ctx.emoji, ctx.member)
 
@@ -174,16 +216,16 @@ async def on_raw_reaction_add(ctx:discord.RawReactionActionEvent):
             CURRENT_VOTING.append(emoji_string)
 
         #either delete the emoji or delete the message
-        if yea.count >= REQUIRED_VOTES:
+        if yea.count >= REQUIRED_VOTES_DICT[channel.guild.id]:
             emoji_name = emoji_string[1:-2][1:].split(":")[-2]
             emoji = None
             for i in bot.guilds:
                 emoji = discord.utils.get(i.emojis, name=emoji_name)
             CURRENT_VOTING.remove(emoji_string)
             await message.delete()
-            emoji.delete()
+            await emoji.delete()
             await channel.send("Vote succeeded to delete " + emoji_string, delete_after=15)    
-        elif nay.count >= REQUIRED_VOTES:
+        elif nay.count >= REQUIRED_VOTES_DICT[channel.guild.id]:
             CURRENT_VOTING.remove(emoji_string)
             await message.delete()
             await channel.send("Vote failed to delete " + emoji_string, delete_after=15)
@@ -231,4 +273,31 @@ async def on_guild_role_update(before:discord.Role, after:discord.Role):
                     REQUIRED_POSITION = role.position
 
 
+@bot.event
+async def on_guild_join(guild:discord.Guild):
+    if guild.id not in REQUIRED_VOTES_DICT:
+        f = open(DICT_FILE_NAME, "a")
+        print("Guild ID: " + str(guild.id) + " was not found in dict.txt... Adding now with default votes.")
+        REQUIRED_VOTES_DICT[guild.id] = REQUIRED_VOTES_DEFAULT
+        f.write("\n" +str(guild.id) + ":" + str(REQUIRED_VOTES_DEFAULT))
+        f.close()
+
+
+@bot.event
+async def on_guild_remove(guild:discord.Guild):
+    if guild.id in REQUIRED_VOTES_DICT:
+        del REQUIRED_VOTES_DICT[guild.id]
+        f = open(DICT_FILE_NAME, "w")
+        for id, value in REQUIRED_VOTES_DICT.items():
+            f.write(str(id) + ":" + str(value))
+        f.close()
+
+
+
 bot.run(DISCORD_TOKEN)
+
+#docker-compose build
+#docker-compose up -d
+#docker-compose down
+#docker system prune
+#cobaltium server id : 125385898593484800

@@ -1,0 +1,11 @@
+python-dotenv==0.20.0
+async-timeout==3.0.1
+beautifulsoup4==4.11.1
+discord-py-interactions==4.1.0
+discord-py-slash-command==3.0.3
+discord.py==1.7.3
+discord-py-interactions==4.1.0
+discord-py-slash-command==3.0.3
+Pillow==9.1.0
+requests==2.27.1
+aiohttp==3.7.4.post0

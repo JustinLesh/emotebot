@@ -1,0 +1,8 @@
+version: '3.10.4'
+
+services:
+  emotebot:
+    container_name: emotebot
+    build: 
+      context: ./
+    image: justinlesh/emotebot
