@@ -142,7 +142,7 @@ async def _remove(ctx:SlashContext, emoji: discord.Emoji):
             if guild_emoji.name.lower() == "gigachad" or guild_emoji.name.lower() == "chad":
                 await ctx.reply("No. " + emoji, allowed_mentions=None, delete_after=15)
             else:
-                msg = await ctx.reply("React with ✅ or ❎ to vote to remove the emoji: " + emoji, allowed_mentions=None, delete_after=86400)
+                msg = await ctx.reply("React with ✅ to remove or ❎ to keep. Vote to remove the emoji: " + emoji, allowed_mentions=None, delete_after=86400)
                 await msg.add_reaction("✅")
                 await msg.add_reaction("❎")
                 if emoji not in CURRENT_VOTING:
@@ -168,8 +168,11 @@ async def _remove(ctx:SlashContext, emoji: discord.Emoji):
 )
 async def _setvoting(ctx:SlashContext, amount:int):
     if ctx.author.top_role.position < ctx.guild.roles[-1].position:
-       return await ctx.reply("You don't have the permissions to do this. Reason: Role too low.", delete_after=15)
+        return await ctx.reply("You don't have the permissions to do this. Reason: Role too low.", delete_after=15)
+    if amount < 1:
+        return await ctx.reply("The amount set has to be greater or equal to 1.", delete_after=15)
     previous = REQUIRED_VOTES_DICT[ctx.guild.id]
+    amount += 1
     REQUIRED_VOTES_DICT.update({ ctx.guild.id : amount })
     f = open(DICT_FILE_NAME, "w")
     count = 1
@@ -182,7 +185,7 @@ async def _setvoting(ctx:SlashContext, amount:int):
             f.write(str(id) + ":" + str(value))
     f.close()
 
-    await ctx.reply("Amount of votes required changed from '" + str(previous) + " to '" + str(amount) + "'.", delete_after=15)
+    await ctx.reply("Amount of votes required changed from '" + str(previous-1) + " to '" + str(amount-1) + "'.", delete_after=15)
 
 
 @bot.event
