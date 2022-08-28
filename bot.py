@@ -185,9 +185,9 @@ async def _rename(ctx:SlashContext, emoji: discord.Emoji, new_name:str):
         #if exists in guild then vote to remove otherwise error message.
         if guild_emoji is not None:
             await guild_emoji.edit(name=new_name)
-            await ctx.reply("Successfully changed the emojis name.", allowed_mentions=None, delete_after=15)
+            await ctx.reply("Successfully changed the emojis name. Emote name was {previous} and is renamed to {new}".format(previous=emoji_parts[0], new=new_name), allowed_mentions=None, delete_after=86400)
         else:
-            await ctx.reply(emoji + " is not a valid custom emoji in this server. Try again with a server specific emoji.", allowed_mentions=None, delete_after=86400)
+            await ctx.reply(emoji + " is not a valid custom emoji in this server. Try again with a server specific emoji.", allowed_mentions=None, delete_after=15)
 
 
 @slash.slash(
