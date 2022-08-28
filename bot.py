@@ -154,6 +154,43 @@ async def _remove(ctx:SlashContext, emoji: discord.Emoji):
 
 
 @slash.slash(
+    name="rename",
+    description="Renames a Emoji to another name",
+    guild_ids=guild_id
+)
+async def _rename(ctx:SlashContext, emoji: discord.Emoji, new_name:str):
+    if ctx.author.top_role.position < REQUIRED_POSITION:
+       return await ctx.reply("You don't have the permissions to do this. Reason: Role too low.", delete_after=15)
+        
+    if emoji in CURRENT_VOTING:
+        return await ctx.reply("That Emoji is being voted on. Try doing it again later.", delete_after=30)
+        
+    emote_parts = []
+    #check to see if it is a custom emoji
+    if emoji[0] == "<" and emoji[-1] == ">":
+        #get list of emoji info
+        if emoji[1] == "a":     #this means we have an animated emoji
+            emoji_parts = emoji[1:-2][1:].split(":")        
+            temp = [emoji_parts[0], emoji_parts[1], emoji_parts[2]]
+            emoji_parts[0] = temp[1]       #emoji_parts[0] is the emoji's name
+            emoji_parts[1] = temp[2]       #emoji_parts[1] is the emoji's id
+            emoji_parts[2] = temp[0]       #emoji_parts[2] is the emoji's animated tag
+        else:
+            emoji_parts = emoji[1:-2][1:].split(":")    #emoji_parts[0] is the emoji's name
+            emoji_parts[0] = emoji_parts[0]             #emoji_parts[1] is the emoji's id 
+
+        #fetch emoji from guild's emoji list 
+        guild_emoji = discord.utils.get(ctx.guild.emojis, name=emoji_parts[0])
+
+        #if exists in guild then vote to remove otherwise error message.
+        if guild_emoji is not None:
+            await guild_emoji.edit(name=new_name)
+            await ctx.reply("Successfully changed the emojis name.", allowed_mentions=None, delete_after=15)
+        else:
+            await ctx.reply(emoji + " is not a valid custom emoji in this server. Try again with a server specific emoji.", allowed_mentions=None, delete_after=86400)
+
+
+@slash.slash(
     name="setvoting",
     description='Set the amount of votes required for a emote to be removed.',
     guild_ids=guild_id,
@@ -227,11 +264,11 @@ async def on_raw_reaction_add(ctx:discord.RawReactionActionEvent):
             CURRENT_VOTING.remove(emoji_string)
             await message.delete()
             await emoji.delete()
-            await channel.send("Vote succeeded to delete " + emoji_string, delete_after=15)    
+            await channel.send("Vote succeeded to delete " + emoji_string, delete_after=21600)    
         elif nay.count >= REQUIRED_VOTES_DICT[channel.guild.id]:
             CURRENT_VOTING.remove(emoji_string)
             await message.delete()
-            await channel.send("Vote failed to delete " + emoji_string, delete_after=15)
+            await channel.send("Vote failed to delete " + emoji_string, delete_after=10800)
 
 
 @bot.event
