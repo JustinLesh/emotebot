@@ -6,6 +6,8 @@ from discord_slash import SlashCommand, SlashContext
 from discord_slash.utils.manage_commands import create_choice, create_option
 from PIL import Image
 import io
+from io import BytesIO
+from PIL import Image, ImageSequence
 import requests
 import os
 from dotenv import load_dotenv
@@ -96,13 +98,24 @@ async def _add(ctx:SlashContext, url:str, custom_name:str=None):
 
         if (img_size > 256 * 1000):
             img.save(img_bytes, quality=20,optimize=True)
-        img_bytes.seek(0)
+        print(img_bytes.getbuffer().nbytes)
+
+        quality = 100
+        size = 999999
+        while size > 262144 and quality > 0:
+            new_img = await scale_image(img_bytes, quality)
+            size = len(new_img)
+            print(size , end=" ")
+            quality = quality - 5
+            print(quality)
     except (requests.exceptions.MissingSchema, requests.exceptions.InvalidURL, requests.exceptions.InvalidSchema, requests.exceptions.ConnectionError):
         return await ctx.reply("The URL you have provided is invalid.", delete_after=15)
     try:
-        emoji = await ctx.guild.create_custom_emoji(name=emoji_name if custom_name is None else custom_name, image=img_bytes.read())
+        emoji = await ctx.guild.create_custom_emoji(name=emoji_name if custom_name is None else custom_name, image=new_img)
     except discord.InvalidArgument:
         return await ctx.reply("Invalid image type. Only PNG, JPEG and GIF are supported.", delete_after=15)
+    except discord.HTTPException as e:
+        return await ctx.reply("Encountered HTTP error: " + e.text, delete_after=15)
     await ctx.reply("Successfully added the emoji {0.name} <{1}:{0.name}:{0.id}>!".format(emoji, "a" if emoji.animated else ""), delete_after=180)
 
 
@@ -332,6 +345,48 @@ async def on_guild_remove(guild:discord.Guild):
             f.write(str(id) + ":" + str(value))
         f.close()
 
+#TODO: Try make 128x128 instead of scale? See how quality is potentially? Maybe remove quality and just keep color quantizations?
+async def scale_image(image_bytes, qualityvalue):
+    img = Image.open(image_bytes)
+    max_size = 128
+    # Determine the new dimensions while keeping the aspect ratio
+    width, height = img.size
+    if width > height:
+        new_width = max_size
+        new_height = int(height * (max_size / width))
+    else:
+        new_height = max_size
+        new_width = int(width * (max_size / height))
+    size = (new_width, new_height)
+
+    # If image is GIF, use the 'resize' method
+    if img.format == "GIF":
+        # Get frames of the GIF
+        frames = []
+        try:
+            while True:
+                frames.append(img.copy())
+                img.seek(len(frames))
+        except EOFError:
+            pass
+
+        # Scale each frame and save to buffer
+        frames = [f.resize(size, resample=Image.Resampling.NEAREST) for f in frames]
+        # Reduce the number of colors
+        frames = [f.quantize(colors=64) for f in frames]
+        #frames = [f.quantize(colors=64) for f in frames]
+        b = BytesIO()
+        frames[0].save(b, format="GIF", save_all=True, quality=qualityvalue, optimize=True, append_images=frames[1:], loop=0)
+        b.seek(0)
+        return b.read()
+
+    # For other image formats, use the 'thumbnail' method
+    else:
+        img.thumbnail(size, resample=Image.Resampling.NEAREST)
+        b = BytesIO()
+        img.save(b, quality=qualityvalue, format=img.format)
+        b.seek(0)
+        return b.read()
 
 
 bot.run(DISCORD_TOKEN)
