@@ -49,12 +49,12 @@ async def on_ready():
 
 @slash.slash(
     name="add",
-    description="Provide a url to a BTTV/FFZ emote to add to the server.",
+    description="Provide a url to a BTTV/FFZ/7TV emote to add to the server.",
     guild_ids=guild_id,
     options=[
         create_option(
             name="url",
-            description="BTTV/FFZ url of the emote to add.",
+            description="BTTV/FFZ/7TV url of the emote to add.",
             required=True,
             option_type=3
         ),
@@ -67,6 +67,7 @@ async def on_ready():
     ]
 )
 async def _add(ctx:SlashContext, url:str, custom_name:str=None):
+    #await ctx.reply("Working on it...", delete_after=15)
     emoji_name = None
     if ctx.author.top_role.position < REQUIRED_POSITION:
         return await ctx.reply("You don't have the permissions to do this. Reason: Role too low.", delete_after=15)
@@ -81,35 +82,84 @@ async def _add(ctx:SlashContext, url:str, custom_name:str=None):
         except:
             return await ctx.reply("The URL you have provided is invalid or BTTV api is down.", delete_after=15)
     elif "frankerfacez.com/emoticon/" in url:
-        id = url.split("/")[-1]
-        info = id.split("-")
-        url = "https://cdn.frankerfacez.com/emoticon/" + info[0] + "/4"
-        emoji_name = info[1]
+        try:
+            id = url.split("/")[-1]
+            info = id.split("-")
+            url = "https://cdn.frankerfacez.com/emoticon/" + info[0] + "/4"
+            emoji_name = info[1]
+        except:
+            return await ctx.reply("The URL you have provided is invalid or FFZ api is down.", delete_after=15)
+    elif "7tv.app/emotes/" in url:
+        emote_id = url.split("/")[-1]
+        api_url = f"https://api.7tv.app/v2/emotes/{emote_id}"
+        try:
+            r = requests.get(api_url)
+            emoji_name = r.json().get("name")
+            url = f"https://cdn.7tv.app/emote/{emote_id}/4x.webp"
+        except:
+            return await ctx.reply("The URL you have provided is invalid or 7TV api is down.", delete_after=15)
     else:
-        return await ctx.reply("The URL you have provided is not the two accepted domains (FFZ or BTTV). URL should start with 'betterttv.com/emotes/' or 'frankerfacez.com/emoticon/'", delete_after=15)
+        return await ctx.reply("The URL you have provided is not the three accepted domains (FFZ/BTTV/7TV). URL should start with 'betterttv.com/emotes/' or 'frankerfacez.com/emoticon/' or '/7tv.app/emotes/'", delete_after=15)
         
     try:
         img = None
         img = requests.get(url).content
         img_bytes = io.BytesIO(img)
         img = Image.open(img_bytes)
+        colorvalue = 64
 
         img_size = img_bytes.tell()
 
         if (img_size > 256 * 1000):
             img.save(img_bytes, quality=20,optimize=True)
+
+        was_webp = False
+        if(img.format == "WEBP"):
+            was_webp = True
+            new_bytes = io.BytesIO()
+            #output_path = "output.gif"
+            # load the input image
+            with Image.open(img_bytes) as img2:
+                # create a list to store individual frames
+                frames = []
+                # loop through all frames in the input image
+                for frame in range(img.n_frames):
+                    img.seek(frame)
+                    # convert each frame to RGB format and append to the list
+                    frame_rgb = img.convert("RGB")
+                    frames.append(frame_rgb)
+                # save the list of frames as an animated GIF
+                frames[0].save(new_bytes, save_all=True, append_images=frames[1:], format='GIF', duration=100, loop=0)
+                #frames[0].save(output_path, save_all=True, append_images=frames[1:], format='GIF', duration=100, loop=0)
+            #img,img_bytes = None
+            #img = Image.open(output_path)
+            img_bytes = new_bytes
+            colorvalue=48
+
         print(img_bytes.getbuffer().nbytes)
 
-        quality = 100
-        size = 999999
-        while size > 262144 and quality > 0:
-            new_img = await scale_image(img_bytes, quality)
+        new_img = scale_image(img_bytes, colorvalue)
+        size = len(new_img)
+        print(size)
+        # if was_webp:
+        #     new_img= io.BytesIO(new_img)
+        #     print('fixing image transparency + AA')
+        #     new_img.seek(0)
+        #     new_img = fix_image(new_img)
+        #     size = len(new_img)
+        #     print(size)
+        while size > 262144:
+            colorvalue -= 6
+            new_img = scale_image(img_bytes, colorvalue)
             size = len(new_img)
-            print(size , end=" ")
-            quality = quality - 5
-            print(quality)
+            print(size)
+
+        print(size)
     except (requests.exceptions.MissingSchema, requests.exceptions.InvalidURL, requests.exceptions.InvalidSchema, requests.exceptions.ConnectionError):
         return await ctx.reply("The URL you have provided is invalid.", delete_after=15)
+    except Exception as e:
+        print(e.text)
+        return await ctx.reply("Something went wrong with image processing", delete_after=15)
     try:
         emoji = await ctx.guild.create_custom_emoji(name=emoji_name if custom_name is None else custom_name, image=new_img)
     except discord.InvalidArgument:
@@ -346,7 +396,7 @@ async def on_guild_remove(guild:discord.Guild):
         f.close()
 
 #TODO: Try make 128x128 instead of scale? See how quality is potentially? Maybe remove quality and just keep color quantizations?
-async def scale_image(image_bytes, qualityvalue):
+def scale_image(image_bytes, colorvalue):
     img = Image.open(image_bytes)
     max_size = 128
     # Determine the new dimensions while keeping the aspect ratio
@@ -373,10 +423,10 @@ async def scale_image(image_bytes, qualityvalue):
         # Scale each frame and save to buffer
         frames = [f.resize(size, resample=Image.Resampling.NEAREST) for f in frames]
         # Reduce the number of colors
-        frames = [f.quantize(colors=64) for f in frames]
+        frames = [f.quantize(colors=colorvalue) for f in frames]
         #frames = [f.quantize(colors=64) for f in frames]
         b = BytesIO()
-        frames[0].save(b, format="GIF", save_all=True, quality=qualityvalue, optimize=True, append_images=frames[1:], loop=0)
+        frames[0].save(b, format="GIF", save_all=True, quality=100, optimize=True, append_images=frames[1:], loop=0)
         b.seek(0)
         return b.read()
 
@@ -388,6 +438,41 @@ async def scale_image(image_bytes, qualityvalue):
         b.seek(0)
         return b.read()
 
+def fix_image(img_bytes):
+    with Image.open(img_bytes, mode='r', formats=['GIF']) as im:
+        output_bytes = io.BytesIO()
+        # Get the frames from the GIF file
+        frames = []
+        for frame in ImageSequence.Iterator(im):
+            frames.append(frame.convert("RGBA"))
+
+        # Create the new GIF file
+        with Image.new("RGBA", im.size) as new_im:
+
+            # Set the duration and disposal method for each frame
+            durations = []
+            disposal_methods = []
+            for frame in frames:
+                durations.append(frame.info.get("duration", 100))
+                disposal_methods.append(frame.info.get("disposal", 0))
+
+            # Add the frames to the new GIF file
+            for i, frame in enumerate(frames):
+                new_im.paste(frame, (0, 0), frame)
+                new_im.info["duration"] = durations[i]
+                new_im.info["disposal"] = disposal_methods[i]
+                if i == 0:
+                    new_im.save(output_bytes, format="GIF", save_all=True, append_images=frames[1:])
+                else:
+                    with BytesIO() as f:
+                        new_im.save(f, format="GIF", save_all=True, append_images=frames[i+1:])
+                        f.seek(0)
+                        with Image.open(f) as new_frame:
+                            new_frame.info["duration"] = durations[i]
+                            new_frame.info["disposal"] = disposal_methods[i]
+                            new_frame.save(output_bytes, format="GIF", append=True)
+        return output_bytes.getvalue()
+    
 
 bot.run(DISCORD_TOKEN)
 
